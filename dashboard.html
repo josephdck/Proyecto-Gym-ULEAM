@@ -1,0 +1,220 @@
+<!--
+    DASHBOARD.HTML — Vista del estudiante, migrada a Vue 3 (CDN, sin build).
+    Todo el <body> es la "plantilla" de la app Vue montada en app.js -> montarDashboardVue(),
+    por eso el <body> tiene id="app-dashboard": ese id es lo que Vue busca para montarse.
+    Las variables como {{ diaBailo }}, v-model, v-for, etc. vienen del `return {}` del
+    setup() de esa función; no existen "por sí solas" en HTML puro.
+-->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Gym ULEAM</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+</head>
+<body class="panel-body" id="app-dashboard">
+        <aside class="sidebar">
+            <h2>Gym ULEAM</h2>
+            <div class="perfil-info">
+                <p><strong>Usuario:</strong><br><span id="nombreUsuario">—</span></p>
+            </div>
+
+            <div class="faltas-panel">
+                <div class="faltas-item">
+                    <span class="faltas-label">Bailoterapia</span>
+                    <span id="faltas-bailoterapia" class="contador-faltas">0 / 5</span>
+                </div>
+                <div id="ban-bailoterapia" class="aviso-ban" style="display:none"></div>
+
+                <div class="faltas-item">
+                    <span class="faltas-label">Fuerza</span>
+                    <span id="faltas-fuerza" class="contador-faltas">0 / 5</span>
+                </div>
+                <div id="ban-fuerza" class="aviso-ban" style="display:none"></div>
+            </div>
+
+            <nav class="menu-lateral">
+                <a href="#" class="activo" id="btnMisReservas">Mis Reservas</a>
+                <a href="index.html" class="btn-salir">Cerrar Sesión</a>
+            </nav>
+        </aside>
+
+        <main class="contenido-principal">
+            <header class="panel-header">
+                <h1>Reservar Horario</h1>
+                <p>Selecciona una categoría para ver los horarios y realizar tu reserva.</p>
+            </header>
+
+            <!-- Selector de categoría: :class agrega 'activo' dinámicamente según el ref
+                 categoriaActiva, y @click lo cambia. Esto reemplaza el classList.add/remove
+                 manual que se usaba en la versión Vanilla JS. -->
+            <div class="selector-categoria">
+                <button
+                    class="btn-categoria"
+                    :class="{ activo: categoriaActiva === 'bailoterapia' }"
+                    @click="categoriaActiva = 'bailoterapia'"
+                >Bailoterapia</button>
+                <button
+                    class="btn-categoria"
+                    :class="{ activo: categoriaActiva === 'fuerza' }"
+                    @click="categoriaActiva = 'fuerza'"
+                >Fuerza / Máquinas</button>
+            </div>
+
+            <section class="grid-reservas">
+                <!--
+                    v-show en vez de v-if: ambas tarjetas (bailoterapia y fuerza) quedan
+                    SIEMPRE en el DOM, solo se les alterna display:none/block según la
+                    categoría activa. Se eligió v-show porque el usuario cambia de pestaña
+                    seguido y v-show es más barato que v-if (que destruye/recrea el nodo).
+                -->
+                <div v-show="categoriaActiva === 'bailoterapia'" class="tarjeta-categoria">
+                    <h3>Horarios de Bailoterapia</h3>
+                    <label for="diaBailo">Fecha de la reserva:</label>
+                    <!-- v-model conecta el <select> directamente con el ref diaBailo:
+                         cambia el ref cuando el usuario elige otra fecha, y viceversa. -->
+                    <select id="diaBailo" v-model="diaBailo" class="input-basico">
+                        <!-- v-for repite un <option> por cada elemento de diasValidos (viene de
+                             obtenerDiasValidos() en app.js, ya sin fines de semana ni feriados) -->
+                        <option v-for="d in diasValidos" :key="d.valor" :value="d.valor">{{ d.texto }}</option>
+                    </select>
+
+                    <table class="tabla-horarios" id="tablaBailoterapia">
+                        <thead><tr><th>Hora</th><th>Cupos</th><th>Acción</th></tr></thead>
+                        <tbody>
+                            <!-- Una fila por cada horario del día elegido. filasBailoterapia es un
+                                 computed que llama a construirFilasHorario() en app.js: ya trae
+                                 resuelto cupos disponibles y qué tipo de botón mostrar (fila.btnTipo) -->
+                            <tr
+                                v-for="fila in filasBailoterapia"
+                                :key="fila.id"
+                                :class="{ 'fila-reservada': fila.esEstaFila }"
+                            >
+                                <td>{{ fila.hora }}</td>
+                                <td>
+                                    <span
+                                        class="badge-cupos"
+                                        :class="fila.disponibles <= 0 ? 'lleno' : 'libre'"
+                                    >{{ fila.disponibles }}/{{ fila.max }}</span>
+                                </td>
+                                <td>
+                                    <!-- Cadena v-if/v-else-if: Vue evalúa fila.btnTipo y solo renderiza
+                                         UN botón de estos seis, según el estado calculado en app.js.
+                                         El orden importa (ver comentario de prioridad en construirFilasHorario). -->
+                                    <button
+                                        v-if="fila.btnTipo === 'Suspendido'"
+                                        class="btn-reservar"
+                                        disabled
+                                        style="background:#dc3545; color:white;"
+                                    >Baneado</button>
+                                    <button
+                                        v-else-if="fila.btnTipo === 'cancelar'"
+                                        class="btn-cancelar"
+                                        @click="cancelarReserva('bailoterapia', fila.id, diaBailo)"
+                                    >✕ Cancelar</button>
+                                    <button
+                                        v-else-if="fila.btnTipo === 'yaFuiste'"
+                                        class="btn-reservar"
+                                        disabled
+                                    >Ya fuiste hoy</button>
+                                    <button
+                                        v-else-if="fila.btnTipo === 'turnoActivo'"
+                                        class="btn-reservar"
+                                        disabled
+                                    >Turno activo</button>
+                                    <button
+                                        v-else-if="fila.btnTipo === 'lleno'"
+                                        class="btn-reservar"
+                                        disabled
+                                    >Lleno</button>
+                                    <button
+                                        v-else-if="fila.btnTipo === 'cerrado'"
+                                        class="btn-reservar"
+                                        disabled
+                                    >Cerrado</button>
+                                    <button
+                                        v-else
+                                        class="btn-reservar"
+                                        @click="hacerReserva('bailoterapia', fila.id, diaBailo)"
+                                    >Reservar</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Tarjeta de Fuerza/Máquinas: misma estructura y directivas que la de
+                     Bailoterapia de arriba, solo cambia la categoría fija a 'fuerza' y
+                     los refs asociados (diaFuerza, filasFuerza). -->
+                <div v-show="categoriaActiva === 'fuerza'" class="tarjeta-categoria">
+                    <h3>Horarios de Fuerza / Máquinas</h3>
+                    <label for="diaFuerza">Fecha de la reserva:</label>
+                    <select id="diaFuerza" v-model="diaFuerza" class="input-basico">
+                        <option v-for="d in diasValidos" :key="d.valor" :value="d.valor">{{ d.texto }}</option>
+                    </select>
+
+                    <table class="tabla-horarios" id="tablaFuerza">
+                        <thead><tr><th>Hora</th><th>Cupos</th><th>Acción</th></tr></thead>
+                        <tbody>
+                            <tr
+                                v-for="fila in filasFuerza"
+                                :key="fila.id"
+                                :class="{ 'fila-reservada': fila.esEstaFila }"
+                            >
+                                <td>{{ fila.hora }}</td>
+                                <td>
+                                    <span
+                                        class="badge-cupos"
+                                        :class="fila.disponibles <= 0 ? 'lleno' : 'libre'"
+                                    >{{ fila.disponibles }}/{{ fila.max }}</span>
+                                </td>
+                                <td>
+                                    <button
+                                        v-if="fila.btnTipo === 'baneado'"
+                                        class="btn-reservar"
+                                        disabled
+                                        style="background:#dc3545; color:white;"
+                                    >Baneado</button>
+                                    <button
+                                        v-else-if="fila.btnTipo === 'cancelar'"
+                                        class="btn-cancelar"
+                                        @click="cancelarReserva('fuerza', fila.id, diaFuerza)"
+                                    >✕ Cancelar</button>
+                                    <button
+                                        v-else-if="fila.btnTipo === 'yaFuiste'"
+                                        class="btn-reservar"
+                                        disabled
+                                    >Ya fuiste hoy</button>
+                                    <button
+                                        v-else-if="fila.btnTipo === 'turnoActivo'"
+                                        class="btn-reservar"
+                                        disabled
+                                    >Turno activo</button>
+                                    <button
+                                        v-else-if="fila.btnTipo === 'lleno'"
+                                        class="btn-reservar"
+                                        disabled
+                                    >Lleno</button>
+                                    <button
+                                        v-else-if="fila.btnTipo === 'cerrado'"
+                                        class="btn-reservar"
+                                        disabled
+                                    >Cerrado</button>
+                                    <button
+                                        v-else
+                                        class="btn-reservar"
+                                        @click="hacerReserva('fuerza', fila.id, diaFuerza)"
+                                    >Reservar</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    <div id="toast" class="toast"></div>
+    <script src="app.js"></script>
+</body>
+</html>

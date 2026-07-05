@@ -1,0 +1,168 @@
+<!--
+    ADMIN.HTML — Panel de administración, migrado a Vue 3 (CDN, sin build).
+    Igual que en dashboard.html, el <body> completo es la plantilla de la app Vue
+    (montarAdminVue() en app.js), montada con id="app-admin".
+    Tiene DOS secciones (Agenda/Asistencia y Gestión de Usuarios) que se alternan
+    con v-show según el ref seccionActiva, sin recargar la página.
+-->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Gym ULEAM</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+</head>
+<body class="panel-body" id="app-admin">
+
+    <aside class="sidebar admin-sidebar">
+        <h2>Panel Admin</h2>
+        <!-- Navegación entre secciones: @click.prevent evita que el <a href="#"> salte
+             al inicio de la página, y cambia seccionActiva, que a su vez controla
+             qué <section> se muestra abajo. El atributo data-seccion ya no lo lee
+             Vue (es un resabio de la versión Vanilla), pero se deja para que
+             activarEnlacesMuertos() en app.js no le robe el evento click a Vue. -->
+        <nav class="menu-lateral">
+            <a href="#" data-seccion="asistencia" :class="{ activo: seccionActiva === 'asistencia' }" @click.prevent="seccionActiva = 'asistencia'">📋 Agenda y Asistencia</a>
+            <a href="#" data-seccion="usuarios" :class="{ activo: seccionActiva === 'usuarios' }" @click.prevent="seccionActiva = 'usuarios'">👥 Gestión Usuarios</a>
+            <a href="index.html" class="btn-salir">Cerrar Sesión</a>
+        </nav>
+    </aside>
+
+    <main class="contenido-principal">
+
+        <!-- v-show alterna esta sección completa según seccionActiva (ver nav del sidebar) -->
+        <section id="seccion-asistencia" class="seccion-admin" v-show="seccionActiva === 'asistencia'">
+            <header class="panel-header">
+                <h1>Agenda y Asistencia</h1>
+                <p>Selecciona la categoría y el día para visualizar los cupos y marcar la asistencia de los estudiantes.</p>
+            </header>
+            
+            <!-- Igual que en el dashboard: :class agrega 'activo' según categoriaActiva -->
+            <div class="selector-categoria" style="margin-bottom: 16px;">
+                <button id="btnAdminBailo" class="btn-categoria" :class="{ activo: categoriaActiva === 'bailoterapia' }" @click="categoriaActiva = 'bailoterapia'">Bailoterapia</button>
+                <button id="btnAdminFuerza" class="btn-categoria" :class="{ activo: categoriaActiva === 'fuerza' }" @click="categoriaActiva = 'fuerza'">Fuerza / Máquinas</button>
+            </div>
+
+           <!-- Selector de fecha (v-model + v-for sobre diasValidos, igual que en el dashboard)
+                y botón de purga que llama a purgarReservas() en app.js -->
+            <div style="margin-bottom: 24px; background: white; padding: 16px; border-radius: 12px; border: 1px solid #eee; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    <label for="diaAdmin" style="font-weight: 700; color: var(--verde);">Fecha de la agenda:</label>
+                    <select id="diaAdmin" v-model="diaAdmin" class="input-basico" style="margin: 0; max-width: 250px;">
+                        <option v-for="d in diasValidos" :key="d.valor" :value="d.valor">{{ d.texto }}</option>
+                    </select>
+                </div>
+                <button id="btnLimpiarReservas" class="btn-rojo" style="margin: 0; padding: 10px 20px;" @click="purgarReservas">Purgar Reservas Antiguas</button>
+            </div>
+
+            <!-- Chips con los totales del día, calculados en el computed `resumen` de app.js -->
+            <div id="resumenAsistencia" class="resumen-asistencia">
+                <span class="chip gris">Pendientes (Día): {{ resumen.pendientes }}</span>
+                <span class="chip verde">Asistieron: {{ resumen.asistencias }}</span>
+                <span class="chip rojo">Faltaron: {{ resumen.faltas }}</span>
+            </div>
+
+            <!-- Una tarjeta por cada horario (h8, h9, ... h18), con su propia tabla de
+                 estudiantes que reservaron ese horario ese día. horariosConDatos ya viene
+                 armado desde app.js con las reservas resueltas (usuarioId -> nombre/carrera) -->
+            <div id="contenedorHorariosAdmin">
+                <div v-for="h in horariosConDatos" :key="h.id" class="tarjeta-categoria" style="margin-bottom: 20px;">
+                    <h3 style="display:flex; justify-content:space-between; margin-bottom:12px; color:var(--verde); border-bottom:1px solid #eee; padding-bottom:10px;">
+                        <span>🕒 {{ h.hora }}</span>
+                        <span class="badge-cupos" :class="h.disponibles <= 0 ? 'lleno' : 'libre'">Cupos disponibles: {{ h.disponibles }}/{{ h.max }}</span>
+                    </h3>
+
+                    <!-- v-if/v-else a nivel de tabla completa: si no hay reservas ese horario,
+                         se muestra un mensaje en vez de una tabla vacía -->
+                    <p v-if="h.reservas.length === 0" class="celda-vacia" style="padding:15px 0;">No hay reservas registradas en este horario.</p>
+
+                    <table v-else class="tabla-admin">
+                        <thead><tr><th>Estudiante</th><th>Carrera</th><th>Estado</th><th>Acciones</th></tr></thead>
+                        <tbody>
+                            <tr v-for="res in h.reservas" :key="res.id" :class="{ 'fila-asistio': res.estado === 'asistio', 'fila-falto': res.estado === 'falto' }">
+                                <td><strong>{{ res.nombreUsuario }}</strong></td>
+                                <td>{{ res.carreraUsuario }}</td>
+                                <td>
+                                    <span v-if="res.estado === 'asistio'" class="estado-badge asistio">Asistió</span>
+                                    <span v-else-if="res.estado === 'falto'" class="estado-badge falto">Faltó</span>
+                                    <span v-else class="estado-badge pendiente">Pendiente</span>
+                                </td>
+                                <td>
+                                    <!-- cambiarAsistencia hace "toggle": si ya estaba en ese estado,
+                                         vuelve a 'pendiente' (ver la función en app.js) -->
+                                    <div class="acciones-celda">
+                                        <button class="btn-verde" :class="{ activo: res.estado === 'asistio' }" @click="cambiarAsistencia(res.id, 'asistio')">Asistió</button>
+                                        <button class="btn-rojo" :class="{ activo: res.estado === 'falto' }" @click="cambiarAsistencia(res.id, 'falto')">Faltó</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Segunda sección: Gestión de Usuarios, alternada con la de arriba vía v-show -->
+        <section id="seccion-usuarios" class="seccion-admin" v-show="seccionActiva === 'usuarios'">
+            <header class="panel-header">
+                <h1>Gestión de Usuarios</h1>
+                <p>Visualiza, filtra y administra los miembros registrados.</p>
+            </header>
+            
+            <!-- Filtros (Todos/Activos/Inactivos), búsqueda con v-model (reactiva en cada
+                 tecla) y orden — los tres alimentan el computed usuariosFiltrados de app.js -->
+            <div style="display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; align-items: center; justify-content: space-between;">
+                <div class="barra-filtros" style="margin-bottom: 0;">
+                    <button class="btn-filtro" :class="{ activo: filtroUsuario === 'todos' }" @click="filtroUsuario = 'todos'">Todos</button>
+                    <button class="btn-filtro" :class="{ activo: filtroUsuario === 'activos' }" @click="filtroUsuario = 'activos'">Activos</button>
+                    <button class="btn-filtro" :class="{ activo: filtroUsuario === 'inactivos' }" @click="filtroUsuario = 'inactivos'">Inactivos</button>
+                </div>
+                <div style="display: flex; gap: 10px; flex: 1; min-width: 320px; justify-content: flex-end;">
+                    <input type="text" id="buscarUsuario" v-model="busquedaUsuario" class="input-basico" placeholder="🔍 Buscar estudiante..." style="margin: 0; max-width: 280px;">
+                    <select id="ordenarUsuarios" v-model="ordenUsuario" class="input-basico" style="margin: 0; width: auto;">
+                        <option value="defecto">Ordenar por...</option>
+                        <option value="alfabetico">Alfabético</option>
+                        <option value="facultad">Por Facultad</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="seccion-tabla">
+                <table class="tabla-admin" id="tablaUsuarios">
+                    <thead>
+                        <tr><th>Nombre</th><th>Correo</th><th>Carrera/Semestre</th><th>Estado</th><th>Faltas</th><th>Acciones</th></tr>
+                    </thead>
+                    <tbody>
+                        <!-- Mensaje de "vacío" si el filtro/búsqueda no encuentra a nadie -->
+                        <tr v-if="usuariosFiltrados.length === 0">
+                            <td colspan="6" class="celda-vacia">No se encontraron estudiantes.</td>
+                        </tr>
+                        <tr v-for="user in usuariosFiltrados" :key="user.id">
+                            <td><strong>{{ user.nombre }}</strong></td>
+                            <td>{{ user.correo }}</td>
+                            <td>{{ user.carrera || 'No definida' }}<br><small>(Sem. {{ user.semestre || 'N/A' }})</small></td>
+                            <td>
+                                <span class="badge-estado" :class="user.activo ? 'activo' : 'inactivo'">{{ user.activo ? 'Activo' : 'Inactivo' }}</span>
+                                <!-- tieneSuspension() revisa si baneadoHasta sigue vigente hoy (método en app.js) -->
+                                <span v-if="tieneSuspension(user)" class="badge-estado baneado">Suspendido</span>
+                            </td>
+                            <td><small>Bailo: {{ user.faltas.bailoterapia }} | Fuerza: {{ user.faltas.fuerza }}</small></td>
+                            <td>
+                                <!-- Un solo botón por fila: "Desactivar" u "Activar" según el estado actual -->
+                                <button v-if="user.activo" class="btn-accion-usuario secundario" @click="toggleEstadoUsuario(user.id, false)">Desactivar</button>
+                                <button v-else class="btn-accion-usuario" @click="toggleEstadoUsuario(user.id, true)">Activar</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+    </main>
+
+    <div id="toast" class="toast"></div>
+    <script src="app.js"></script>
+</body>
+</html>

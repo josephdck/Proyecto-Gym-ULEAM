@@ -1,0 +1,393 @@
+<!--
+    INDEX.HTML — Landing pública + Login/Registro/Recuperación, todo en Vue 3 (CDN).
+    A diferencia de dashboard.html y admin.html, aquí Vue NO controla todo el <body>:
+    el navbar y el hero de arriba son HTML estático, y la app Vue se monta solo sobre
+    el <div id="app"> que envuelve el modal (login/registro/recuperar). Los modales
+    de reglamento y "cuenta baneada", más abajo, quedan fuera de Vue y se manejan
+    con JS plano en app.js -> initIndex().
+-->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gym ULEAM - Gestión</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+</head>
+<body>
+
+  <nav class="navbar">
+        <div class="logo">GYM ULEAM</div>
+        <div class="nav-links">
+            <a href="#" id="btnAbrirReglamento">Reglamento</a>
+            <button id="btnAbrirLogin" class="btn-primary">Iniciar Sesión</button>
+        </div>
+    </nav>
+
+    <main class="hero">
+        <div class="hero-content">
+            <h1>Sistema de Gestión de Gimnasio</h1>
+            <p>Exclusivo para la comunidad universitaria de la ULEAM.<br>Reserva tu turno, sin costo, sin complicaciones.</p>
+            <button id="btnAbrirRegistro" class="btn-secondary">Regístrate Ahora</button>
+        </div>
+    </main>
+
+    <!-- Toda esta app Vue vive dentro de #app: un solo modal que cambia de contenido
+         según el ref `vista` ('login' | 'registro' | 'recuperar'), en vez de tener
+         tres modales separados. :class oculta/muestra el modal completo según modalAbierto -->
+    <div id="app">
+    <div class="modal" :class="{ oculto: !modalAbierto }">
+        <div class="modal-content" style="max-height: 90vh; overflow-y: auto;">
+            <span class="cerrar-modal" @click="modalAbierto = false">&times;</span>
+
+            <!-- Formulario de Login: @submit.prevent evita el refresco de página normal
+                 de un <form> y en su lugar llama a handleLogin() (definido en el <script>) -->
+            <div v-if="vista === 'login'">
+                <h2>Iniciar Sesión</h2>
+                <p class="subtitulo-form">Usa tu correo institucional.</p>
+                <form @submit.prevent="handleLogin">
+                    <div class="input-group">
+                        <label for="loginUsuario">Correo</label>
+                        <input type="text" id="loginUsuario" v-model="login.usuario" placeholder="correo@live.uleam.edu.ec" required>
+                    </div>
+                    <div class="input-group">
+                        <label for="loginClave">Contraseña</label>
+                        <input type="password" id="loginClave" v-model="login.clave" placeholder="••••••••" required>
+                    </div>
+                    <button type="submit" class="btn-block">Entrar</button>
+                    <a href="#" @click.prevent="abrirModal('recuperar')" class="link-pequeno">¿Olvidaste tu contraseña?</a>
+                </form>
+            </div>
+
+            <!-- Formulario de Registro. Varios campos usan @input con una función "filtro"
+                 (filtrarCedula, filtrarNombre, filtrarApellidos) que limpia caracteres
+                 inválidos EN VIVO mientras el usuario escribe, además de las validaciones
+                 nativas de HTML (pattern, maxlength, required). -->
+            <div v-if="vista === 'registro'">
+                <h2>Nuevo Registro</h2>
+                <p class="subtitulo-form">Solo correos <strong>@live.uleam.edu.ec</strong></p>
+                <form @submit.prevent="handleRegistro">
+                    <div class="input-group">
+                        <label for="regCorreo">Correo Institucional</label>
+                        <input type="email" id="regCorreo" v-model="registro.correo" placeholder="e131...8@live.uleam.edu.ec" required>
+                    </div>
+                    <div class="input-group">
+                        <label for="regCedula">Cédula (10 dígitos)</label>
+                        <input type="text" id="regCedula" v-model="registro.cedula" @input="filtrarCedula" maxlength="10" pattern="\d{10}" required>
+                    </div>
+                    <div class="input-group">
+                        <label for="regNombre">Nombres</label>
+                        <input type="text" id="regNombre" v-model="registro.nombre" @input="filtrarNombre" placeholder="Ej. Joseph Damian" required>
+                    </div>
+                    <div class="input-group">
+                        <label for="regApellidos">Apellidos</label>
+                        <input type="text" id="regApellidos" v-model="registro.apellidos" @input="filtrarApellidos" placeholder="Ej. Loor Chila" required>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="regFacultad">Facultad</label>
+                        <select id="regFacultad" v-model="registro.facultad" class="input-basico" style="margin: 0; padding: 10px;" required>
+                            <option value="" disabled>Selecciona tu Facultad...</option>
+                            <option v-for="fac in facultades" :key="fac" :value="fac">{{ fac }}</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="regCarrera">Carrera</label>
+                        <!-- Select "dependiente": carrerasDisponibles se recalcula automáticamente
+                             cada vez que cambia registro.facultad, gracias al `watch()` en el
+                             <script>. El campo se deshabilita (:disabled) hasta elegir facultad. -->
+                        <input type="text" id="regCarrera" v-model="registro.carrera" list="listaCarreras" class="input-basico" style="margin: 0; padding: 10px;" placeholder="Selecciona una facultad primero..." required autocomplete="off" :disabled="!registro.facultad">
+                        <datalist id="listaCarreras">
+                            <option v-for="c in carrerasDisponibles" :key="c" :value="c"></option>
+                        </datalist>
+                    </div>
+                    <div class="input-group">
+                        <label for="regSemestre">Semestre / Nivel</label>
+                        <select id="regSemestre" v-model="registro.semestre" class="input-basico" style="margin: 0; padding: 10px;" required>
+                            <option value="" disabled>Selecciona tu semestre...</option>
+                            <option value="1">1er Semestre</option>
+                            <option value="2">2do Semestre</option>
+                            <option value="3">3er Semestre</option>
+                            <option value="4">4to Semestre</option>
+                            <option value="5">5to Semestre</option>
+                            <option value="6">6to Semestre</option>
+                            <option value="7">7mo Semestre</option>
+                            <option value="8">8vo Semestre</option>
+                            <option value="9">9no Semestre</option>
+                            <option value="10">10mo Semestre</option>
+                        </select>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="regPregunta">Pregunta de Seguridad</label>
+                        <select id="regPregunta" v-model="registro.pregunta" class="input-basico" style="margin: 0; padding: 10px;" required>
+                            <option value="" disabled>Selecciona una pregunta...</option>
+                            <option value="mascota">¿Cuál fue el nombre de tu primera mascota?</option>
+                            <option value="ciudad">¿En qué ciudad naciste?</option>
+                            <option value="abuela">¿Cuál es el nombre de tu abuela?</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="regRespuesta">Respuesta de Seguridad</label>
+                        <input type="text" id="regRespuesta" v-model="registro.respuesta" placeholder="Tu respuesta secreta" required>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="regClave">Crear Contraseña</label>
+                        <input type="password" id="regClave" v-model="registro.clave" placeholder="Mínimo 6 caracteres" minlength="6" required>
+                    </div>
+                    <button type="submit" class="btn-block">Registrarse</button>
+                </form>
+            </div>
+
+            <!-- Formulario de Recuperación: valida correo + pregunta + respuesta de seguridad
+                 antes de permitir escribir la nueva contraseña (ver handleRecuperar en el script) -->
+            <div v-if="vista === 'recuperar'">
+                <h2>Recuperación de Contraseña</h2>
+                <p class="subtitulo-form">Responde tu pregunta de seguridad para crear una nueva contraseña.</p>
+                <form @submit.prevent="handleRecuperar">
+                    <div class="input-group">
+                        <label for="recCorreo">Correo Institucional</label>
+                        <input type="email" id="recCorreo" v-model="recuperar.correo" placeholder="e131...8@live.uleam.edu.ec" required>
+                    </div>
+                    <div class="input-group">
+                        <label for="recPregunta">Pregunta de Seguridad</label>
+                        <select id="recPregunta" v-model="recuperar.pregunta" class="input-basico" style="margin: 0; padding: 10px;" required>
+                            <option value="" disabled>Selecciona tu pregunta...</option>
+                            <option value="mascota">¿Cuál fue el nombre de tu primera mascota?</option>
+                            <option value="ciudad">¿En qué ciudad naciste?</option>
+                            <option value="abuela">¿Cuál es el nombre de tu abuela?</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="recRespuesta">Respuesta de Seguridad</label>
+                        <input type="text" id="recRespuesta" v-model="recuperar.respuesta" placeholder="Tu respuesta" required>
+                    </div>
+                    <div class="input-group">
+                        <label for="recNuevaClave">Nueva Contraseña</label>
+                        <input type="password" id="recNuevaClave" v-model="recuperar.nuevaClave" placeholder="Mínimo 6 caracteres" minlength="6" required>
+                    </div>
+                    <button type="submit" class="btn-block">Actualizar Contraseña</button>
+                </form>
+            </div>
+
+            <button @click="alternarForm" class="btn-link">{{ textoAlternar }}</button>
+        </div>
+    </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+    <div id="modalReglamento" class="modal oculto">
+        <div class="modal-content" style="max-width: 500px;">
+            <span class="cerrar-modal" id="btnCerrarReglamento">&times;</span>
+            <h2 style="color: var(--verde); margin-bottom: 15px;">Reglamento del Gym ULEAM</h2>
+            <div style="font-size: 14px; color: #333; line-height: 1.8;">
+                <p>Para mantener un ambiente seguro y ordenado, todos los usuarios deben cumplir con las siguientes normativas:</p>
+                <ul style="margin-left: 20px; margin-top: 10px; margin-bottom: 20px;">
+                    <li><strong>Uso de toalla:</strong> Es obligatorio el uso de toalla personal para todas las máquinas.</li>
+                    <li><strong>Hidratación:</strong> Traer su propio termo de agua (no envases de vidrio).</li>
+                    <li><strong>Vestimenta:</strong> Uso obligatorio de ropa deportiva y zapatos cerrados.</li>
+                    <li><strong>Cancelaciones:</strong> Solo se puede cancelar una reserva hasta 1 hora antes del turno.</li>
+                    <li><strong style="color: var(--rojo);">Penalizaciones:</strong> La acumulación de 5 faltas resultará en la suspensión temporal de la cuenta por 5 días.</li>
+                </ul>
+                <button id="btnEntendidoReglamento" class="btn-block">¡Entendido!</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modalBan" class="modal oculto">
+        <div class="modal-content" style="max-width: 400px; text-align: center; border-top: 6px solid var(--rojo);">
+            <h2 style="color: var(--rojo); margin-bottom: 10px;">🚫 Acceso Denegado</h2>
+            <p style="font-size: 15px; color: #333; margin-bottom: 20px;">
+                Tu cuenta ha sido desactivada por la administración.<br><br>Por favor, acércate a bienestar estudiantil para regularizar tu situación.
+            </p>
+            <button id="btnCerrarBan" class="btn-block" style="background-color: var(--rojo);">Entendido</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+    // A diferencia de app.js (que usa la variable global Vue.createApp), aquí se
+    // desestructura directo del objeto Vue para escribir menos: createApp, ref, etc.
+    const { createApp, ref, computed, watch, onMounted } = Vue;
+
+    createApp({
+        setup() {
+            const modalAbierto = ref(false);
+            // 'vista' decide qué formulario mostrar dentro del único modal (ver arriba)
+            const vista = ref('login');
+            const login = ref({ usuario: '', clave: '' });
+            // Objeto único con TODOS los campos del formulario de registro: cada input
+            // del HTML usa v-model="registro.campo" para leer/escribir directo aquí
+            const registro = ref({
+                correo: '', cedula: '', nombre: '', apellidos: '',
+                facultad: '', carrera: '', semestre: '', pregunta: '', respuesta: '', clave: ''
+            });
+            const recuperar = ref({ correo: '', pregunta: '', respuesta: '', nuevaClave: '' });
+            const carrerasDisponibles = ref([]); // Se llena dinámicamente según la facultad elegida
+            const facultades = Object.keys(ULEAM_ACADEMICA); // No necesita ser reactivo: es fijo
+
+            // Computed simple: cambia el texto del botón "alternar" según la vista activa
+            const textoAlternar = computed(() => {
+                if (vista.value === 'recuperar') return 'Volver al Inicio de Sesión';
+                return vista.value === 'login' ? '¿No tienes cuenta? Regístrate' : '¿Ya tienes cuenta? Inicia sesión';
+            });
+
+            // watch() ejecuta esta función cada vez que registro.facultad cambia (select
+            // dependiente). Limpia la carrera elegida antes y repuebla las opciones válidas
+            // desde el diccionario ULEAM_ACADEMICA (definido en app.js).
+            watch(() => registro.value.facultad, (fac) => {
+                registro.value.carrera = '';
+                carrerasDisponibles.value = fac ? ULEAM_ACADEMICA[fac] : [];
+            });
+
+            function abrirModal(tipo) {
+                vista.value = tipo;
+                modalAbierto.value = true;
+            }
+
+            function cerrarModal() {
+                modalAbierto.value = false;
+            }
+
+            // Botón "¿No tienes cuenta?" / "¿Ya tienes cuenta?" / "Volver al login":
+            // decide a qué vista saltar según en cuál está parado ahora mismo
+            function alternarForm() {
+                if (vista.value === 'recuperar') abrirModal('login');
+                else abrirModal(vista.value === 'login' ? 'registro' : 'login');
+            }
+
+            // --- Filtros de entrada en vivo (se ejecutan en cada @input, letra por letra) ---
+            function filtrarCedula(e) {
+                registro.value.cedula = e.target.value.replace(/[^0-9]/g, ''); // Solo dígitos
+            }
+
+            function filtrarLetras(val) {
+                return val.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, ''); // Solo letras y espacios (con tildes/ñ)
+            }
+
+            function filtrarNombre(e) {
+                registro.value.nombre = filtrarLetras(e.target.value);
+            }
+
+            function filtrarApellidos(e) {
+                registro.value.apellidos = filtrarLetras(e.target.value);
+            }
+
+            /**
+             * Valida credenciales contra DB.admin (hardcodeado) y contra DB.usuarios.
+             * Si el usuario existe pero está desactivado por un admin, no lo deja entrar
+             * y muestra el modal de "Acceso Denegado" en vez de redirigir.
+             */
+            function handleLogin() {
+                const usuario = login.value.usuario.trim();
+                const clave = login.value.clave.trim();
+
+                if (usuario === DB.admin.usuario && clave === DB.admin.clave) {
+                    setSesion({ nombre: 'Administrador', rol: 'admin' });
+                    window.location.href = 'admin.html';
+                    return;
+                }
+
+                const user = DB.usuarios.find(u => u.correo === usuario && u.clave === clave);
+                if (user) {
+                    if (!user.activo) {
+                        document.getElementById('modalBan')?.classList.remove('oculto');
+                        return;
+                    }
+                    setSesion({ ...user, rol: 'usuario' });
+                    window.location.href = 'dashboard.html';
+                } else {
+                    mostrarToast('Correo o contraseña incorrectos.', 'error');
+                }
+            }
+
+            /**
+             * Valida y crea un nuevo estudiante. Las validaciones van en cadena, cada una
+             * con su propio `return` para cortar apenas algo falla (fail-fast), en vez de
+             * acumular errores. El correo institucional se AUTO-DERIVA de la cédula
+             * (e${cedula}@live.uleam.edu.ec), no se confía en lo que escriba el usuario.
+             */
+            function handleRegistro() {
+                const r = registro.value;
+                const correo = r.correo.trim();
+                const cedula = r.cedula.trim();
+                const nombre = r.nombre.trim();
+                const apellidosInput = r.apellidos.trim();
+                const facultad = r.facultad;
+                const carrera = r.carrera.trim();
+                const semestre = parseInt(r.semestre);
+                const pregunta = r.pregunta;
+                const respuesta = r.respuesta.trim();
+                const clave = r.clave;
+
+                if (apellidosInput.split(/\s+/).length < 2) { mostrarToast('Ingresa tus dos apellidos.', 'error'); return; }
+                if (cedula.length !== 10 || isNaN(cedula)) { mostrarToast('Cédula inválida.', 'error'); return; }
+                if (DB.usuarios.find(u => u.cedula === cedula)) { mostrarToast('Cédula ya registrada.', 'error'); return; }
+                if (correo !== `e${cedula}@live.uleam.edu.ec`) { mostrarToast('El correo no coincide con la cédula.', 'error'); return; }
+                if (DB.usuarios.find(u => u.correo === correo)) { mostrarToast('Correo ya registrado.', 'error'); return; }
+
+                DB.usuarios.push({
+                    id: Date.now(), correo, cedula, clave, nombre: `${nombre} ${apellidosInput}`,
+                    facultad, carrera, semestre, preguntaSeguridad: pregunta, respuestaSeguridad: respuesta,
+                    faltas: { bailoterapia: 0, fuerza: 0 },
+                    baneadoHasta: { bailoterapia: null, fuerza: null }, activo: true
+                });
+                saveDB();
+
+                mostrarToast('Registro exitoso. Inicia sesión.', 'exito');
+                abrirModal('login');
+                login.value.usuario = correo;
+                login.value.clave = clave;
+            }
+
+            /**
+             * Recupera el acceso sin necesidad de un correo/email real: valida que la
+             * pregunta Y respuesta de seguridad coincidan con las guardadas al registrarse,
+             * y si todo calza, sobreescribe la contraseña directo en DB (simulando lo que
+             * en un sistema real haría un backend con un link temporal por correo).
+             */
+            function handleRecuperar() {
+                const r = recuperar.value;
+                const correo = r.correo.trim();
+                const pregunta = r.pregunta;
+                const respuesta = r.respuesta.trim().toLowerCase();
+                const nuevaClave = r.nuevaClave;
+
+                const user = DB.usuarios.find(u => u.correo === correo);
+                if (!user) { mostrarToast('No existe una cuenta con ese correo.', 'error'); return; }
+                if (user.preguntaSeguridad !== pregunta) { mostrarToast('La pregunta de seguridad no coincide.', 'error'); return; }
+                if (user.respuestaSeguridad.trim().toLowerCase() !== respuesta) { mostrarToast('Respuesta de seguridad incorrecta.', 'error'); return; }
+                if (nuevaClave.length < 6) { mostrarToast('La nueva contraseña debe tener mínimo 6 caracteres.', 'error'); return; }
+
+                user.clave = nuevaClave;
+                saveDB();
+
+                mostrarToast('Contraseña actualizada. Ya puedes iniciar sesión.', 'exito');
+                recuperar.value = { correo: '', pregunta: '', respuesta: '', nuevaClave: '' };
+                abrirModal('login');
+            }
+
+            // onMounted corre una sola vez, cuando Vue ya terminó de pintar el componente
+            // en el DOM. Se usa aquí para cablear los dos botones que están FUERA del
+            // <div id="app"> (en el navbar y el hero estático) pero igual necesitan
+            // abrir el modal de Vue.
+            onMounted(() => {
+                document.getElementById('btnAbrirLogin').onclick = () => abrirModal('login');
+                document.getElementById('btnAbrirRegistro').onclick = () => abrirModal('registro');
+            });
+
+            // Todo lo listado aquí queda accesible en el <template> (este mismo archivo HTML)
+            return {
+                modalAbierto, vista, login, registro, recuperar,
+                facultades, carrerasDisponibles, textoAlternar,
+                abrirModal, cerrarModal, alternarForm,
+                filtrarCedula, filtrarNombre, filtrarApellidos,
+                handleLogin, handleRegistro, handleRecuperar
+            };
+        }
+    }).mount('#app');
+    </script>
+</body>
+</html>
