@@ -37,6 +37,7 @@
 
             <nav class="menu-lateral">
                 <a href="#" class="activo" id="btnMisReservas">Mis Reservas</a>
+                <a href="#" id="btnMiHistorial">Mi Historial</a>
                 <a href="index.html" class="btn-salir">Cerrar Sesión</a>
             </nav>
         </aside>
@@ -104,7 +105,7 @@
                                          UN botón de estos seis, según el estado calculado en app.js.
                                          El orden importa (ver comentario de prioridad en construirFilasHorario). -->
                                     <button
-                                        v-if="fila.btnTipo === 'Suspendido'"
+                                        v-if="fila.btnTipo === 'baneado'"
                                         class="btn-reservar"
                                         disabled
                                         style="background:#dc3545; color:white;"
@@ -212,6 +213,18 @@
                         </tbody>
                     </table>
                 </div>
+            </section>
+
+            <!-- Sección de Historial (RF14): oculta por defecto, se muestra al hacer click
+                 en "Mi Historial". No usa directivas de Vue (v-for, etc.) porque se llena
+                 con JS plano desde renderHistorialUsuario() en app.js -- ver el comentario
+                 de "PESTAÑAS: Historial vs Nueva Reserva" en initDashboard(). -->
+            <section id="seccionHistorial" class="tarjeta-categoria oculto">
+                <h3>Historial de Asistencias</h3>
+                <table class="tabla-horarios" id="tablaHistorialUsuario">
+                    <thead><tr><th>Fecha</th><th>Categoría</th><th>Hora</th><th>Estado</th></tr></thead>
+                    <tbody></tbody>
+                </table>
             </section>
         </main>
     <div id="toast" class="toast"></div>
